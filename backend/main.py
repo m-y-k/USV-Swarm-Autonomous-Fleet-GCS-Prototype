@@ -4,7 +4,10 @@ USV Fleet Command — Main Entry Point
 Starts:
   1. Fleet Manager (MAVLink + Mesh + Leader Election)
   2. WebSocket Server (FastAPI + Uvicorn)
-  
+
+Both run in the SAME asyncio event loop so that broadcast_state()
+can await WebSocket.send_text() on clients owned by that loop.
+
 Usage:
   python main.py                           # Default: 3 boats on localhost
   python main.py --boats 5                 # 5 boats
@@ -12,9 +15,7 @@ Usage:
 """
 import asyncio
 import argparse
-import sys
 import uvicorn
-import threading
 
 from fleet.fleet_manager import FleetManager
 from api.websocket_server import app, set_fleet_manager, broadcast_state
@@ -33,25 +34,29 @@ DEFAULT_CONFIG = {
 
 def create_fleet(num_boats: int, host: str, base_port: int) -> FleetManager:
     """Create and configure the fleet manager with N boats."""
-    
     fleet = FleetManager(on_state_update=broadcast_state)
-    
     for i in range(num_boats):
         port = base_port + (i * 10)
         connection_string = f"udp:{host}:{port}"
         fleet.add_boat(vehicle_id=i, connection_string=connection_string)
-    
     return fleet
 
 
-async def run_fleet(fleet: FleetManager):
-    """Run the fleet manager in async loop."""
-    await fleet.start()
+async def run_all(fleet: FleetManager, ws_host: str, ws_port: int):
+    """Run uvicorn and fleet manager in the same event loop.
 
-
-def run_webserver(host: str, port: int):
-    """Run the FastAPI WebSocket server."""
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    Using uvicorn.Server (programmatic API) instead of uvicorn.run()
+    lets us await it as a coroutine alongside fleet.start(), so both
+    share the same asyncio event loop. This is required so that
+    broadcast_state() can correctly await WebSocket.send_text() on
+    the Starlette clients that belong to this loop.
+    """
+    config = uvicorn.Config(app, host=ws_host, port=ws_port, log_level="info")
+    server = uvicorn.Server(config)
+    await asyncio.gather(
+        server.serve(),
+        fleet.start(),
+    )
 
 
 def main():
@@ -65,7 +70,7 @@ def main():
     parser.add_argument("--ws-port", type=int, default=DEFAULT_CONFIG["ws_port"],
                         help="WebSocket server port")
     args = parser.parse_args()
-    
+
     print("=" * 60)
     print("  USV Fleet Command — Ground Control Station")
     print("=" * 60)
@@ -75,22 +80,12 @@ def main():
     print(f"  WS Server:    http://0.0.0.0:{args.ws_port}")
     print(f"  Dashboard:    http://localhost:5173")
     print("=" * 60)
-    
-    # Create fleet
+
     fleet = create_fleet(args.boats, args.host, args.port)
     set_fleet_manager(fleet)
-    
-    # Run web server in a thread
-    ws_thread = threading.Thread(
-        target=run_webserver,
-        args=("0.0.0.0", args.ws_port),
-        daemon=True,
-    )
-    ws_thread.start()
-    
-    # Run fleet manager in main async loop
+
     try:
-        asyncio.run(run_fleet(fleet))
+        asyncio.run(run_all(fleet, "0.0.0.0", args.ws_port))
     except KeyboardInterrupt:
         print("\n[Fleet] Shutting down...")
         fleet.mavlink.stop()

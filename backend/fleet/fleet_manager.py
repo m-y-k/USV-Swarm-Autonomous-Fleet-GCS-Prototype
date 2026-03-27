@@ -199,10 +199,59 @@ class FleetManager:
     
     def set_mesh_range(self, range_m: float):
         """Dynamically adjust mesh maximum range."""
-        if hasattr(self.mesh, 'max_range'):
-            self.mesh.max_range = range_m
-            self._log_event("mesh", f"Mesh range adjusted to {range_m}m")
+        from mesh.mesh_network import MESH_CONFIG
+        MESH_CONFIG["max_range_meters"] = float(range_m)
+        self._log_event("mesh", f"Mesh range adjusted to {range_m}m")
     
+    async def fleet_auto_patrol(self):
+        """
+        Make ALL vehicles start an AUTO patrol.
+
+        ArduRover rejects AUTO mode entry when the mission is empty
+        (ModeAuto::_enter checks mission.num_commands() < 2).  This method
+        uploads a minimal two-waypoint out-and-back patrol for each vessel
+        based on its current heading, then arms and sets AUTO.
+        """
+        import math
+        vehicles = list(self.mavlink.vehicles.values())
+        if not vehicles:
+            self._log_event("command", "Fleet AUTO: no vehicles connected", "warning")
+            return
+
+        self._log_event("command", "Fleet AUTO patrol: uploading missions...")
+
+        for vehicle in vehicles:
+            lat = vehicle.position.lat or -33.8568
+            lon = vehicle.position.lon or 151.2153
+            hdg_rad = math.radians(vehicle.heading or 0)
+            R = 6371000
+            step = 300  # metres ahead / behind
+
+            # Waypoint ahead in current heading direction
+            wp1_lat = lat + (step * math.cos(hdg_rad) / R) * (180 / math.pi)
+            wp1_lon = lon + (step * math.sin(hdg_rad) / (R * math.cos(math.radians(lat)))) * (180 / math.pi)
+            # Return waypoint behind
+            wp2_lat = lat - (step * math.cos(hdg_rad) / R) * (180 / math.pi)
+            wp2_lon = lon - (step * math.sin(hdg_rad) / (R * math.cos(math.radians(lat)))) * (180 / math.pi)
+
+            self.upload_mission(vehicle.vehicle_id, [
+                {"lat": wp1_lat, "lon": wp1_lon, "alt": 0},
+                {"lat": wp2_lat, "lon": wp2_lon, "alt": 0},
+            ])
+
+        # Allow ArduPilot to process the mission upload before changing mode
+        await asyncio.sleep(1.5)
+
+        for vehicle in vehicles:
+            self.arm(vehicle.vehicle_id)
+
+        await asyncio.sleep(0.5)
+
+        for vehicle in vehicles:
+            self.set_mode(vehicle.vehicle_id, "AUTO")
+
+        self._log_event("command", f"Fleet AUTO patrol started for {len(vehicles)} vessels")
+
     async def run_demo_sequence(self):
         """
         Automated demo sequence per spec §4.9:

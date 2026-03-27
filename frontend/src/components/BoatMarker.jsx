@@ -102,30 +102,34 @@ function getVehicleStatus(vehicle) {
 
 export default function BoatMarker({ vehicle, isSelected, onSelect, gnssDenied = false }) {
   const trailRef = useRef([]);
-  const map = useMap();
+  const map = useMap(); // eslint-disable-line no-unused-vars
 
-  if (!vehicle || (vehicle.position.lat === 0 && vehicle.position.lon === 0)) {
-    return null;
-  }
+  // Derive values before any hooks — optional chaining guards null vehicle
+  const lat = vehicle?.position?.lat ?? 0;
+  const lon = vehicle?.position?.lon ?? 0;
+  const isValid = !!vehicle && (lat !== 0 || lon !== 0);
+  const status = vehicle ? getVehicleStatus(vehicle) : 'offline';
+  const isLeader = vehicle?.mesh?.is_leader ?? false;
 
-  const pos = [vehicle.position.lat, vehicle.position.lon];
-  const status = getVehicleStatus(vehicle);
-  const isLeader = vehicle.mesh?.is_leader || false;
-
-  // Accumulate trail positions
+  // Hooks MUST be called unconditionally (before any early return)
   useEffect(() => {
-    if (vehicle.position.lat !== 0) {
-      trailRef.current.push([...pos]);
-      if (trailRef.current.length > TRAIL_CONFIG.maxPoints) {
-        trailRef.current.shift();
-      }
+    if (!isValid) return;
+    trailRef.current.push([lat, lon]);
+    if (trailRef.current.length > TRAIL_CONFIG.maxPoints) {
+      trailRef.current.shift();
     }
-  }, [vehicle.position.lat, vehicle.position.lon]);
+  }, [lat, lon, isValid]);
 
   const icon = useMemo(
-    () => createBoatIcon(vehicle.heading, status, isLeader, isSelected, gnssDenied),
-    [vehicle.heading, status, isLeader, isSelected, gnssDenied]
+    () => isValid
+      ? createBoatIcon(vehicle.heading, status, isLeader, isSelected, gnssDenied)
+      : null,
+    [vehicle?.heading, status, isLeader, isSelected, gnssDenied, isValid]
   );
+
+  if (!isValid) return null;
+
+  const pos = [lat, lon];
 
   const trail = trailRef.current.length > 1 ? trailRef.current : null;
 

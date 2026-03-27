@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(find 'D:\\\\Drone Projects\\\\USV Swarm Autonomous Fleet GCS Prototype/frontend/src' -type f \\\\\\(-name *.jsx -o -name *.js \\\\\\))"
+      "Bash(find 'D:\\\\Drone Projects\\\\USV Swarm Autonomous Fleet GCS Prototype/frontend/src' -type f \\\\\\(-name *.jsx -o -name *.js \\\\\\))",
+      "Bash(python -m py_compile backend/core/mavlink_manager.py)",
+      "Bash(python -m py_compile backend/fleet/fleet_manager.py)",
+      "Bash(python -m py_compile backend/api/websocket_server.py)"
     ]
   }
 }

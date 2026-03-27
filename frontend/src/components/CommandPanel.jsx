@@ -20,7 +20,9 @@ export default function CommandPanel({ vehicle, sendCommand, allVehicles }) {
   // Fleet-wide commands
   const handleArmAll = () => allVehicles.forEach(v => sendCommand({ type: 'arm', vehicle_id: v.id }));
   const handleDisarmAll = () => allVehicles.forEach(v => sendCommand({ type: 'disarm', vehicle_id: v.id }));
-  const handleAllAuto = () => allVehicles.forEach(v => sendCommand({ type: 'set_mode', vehicle_id: v.id, mode: 'AUTO' }));
+  // ArduRover rejects AUTO mode entry when no mission is loaded. fleet_auto_patrol
+  // uploads a minimal out-and-back patrol per vessel, arms, then sets AUTO.
+  const handleAllAuto = () => sendCommand({ type: 'fleet_auto_patrol' });
   const handleAllHold = () => allVehicles.forEach(v => sendCommand({ type: 'set_mode', vehicle_id: v.id, mode: 'HOLD' }));
   const handleEmergencyAll = () => {
     allVehicles.forEach(v => {
@@ -74,7 +76,7 @@ export default function CommandPanel({ vehicle, sendCommand, allVehicles }) {
         </div>
 
         <div className="command-row">
-          <button className="btn btn-accent btn-sm" onClick={handleAllAuto}>All → AUTO</button>
+          <button className="btn btn-accent btn-sm" onClick={handleAllAuto} title="Upload patrol mission, arm all, set AUTO">All → AUTO</button>
           <button className="btn btn-sm" onClick={handleAllHold}>All → HOLD</button>
         </div>
 

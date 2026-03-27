@@ -45,6 +45,11 @@ export function useWebSocket() {
 
       ws.onclose = () => {
         console.log('[WS] Disconnected');
+        // Guard: only update state if this is still the active connection.
+        // React StrictMode double-invokes effects, creating ws2 before ws1's
+        // async onclose fires. Without this check ws1.onclose would null out
+        // wsRef.current (which already points to ws2), breaking sendCommand.
+        if (wsRef.current !== ws) return;
         setConnected(false);
         wsRef.current = null;
         // Auto-reconnect
@@ -53,7 +58,7 @@ export function useWebSocket() {
 
       ws.onerror = (err) => {
         console.error('[WS] Error:', err);
-        ws.close();
+        if (wsRef.current === ws) ws.close();
       };
 
       wsRef.current = ws;

@@ -51,10 +51,12 @@ export default function App() {
   const gnssDeniedVehicles = activeState?.gnss_denied || {};
   const events = activeState?.events || [];
 
-  // Auto-select first vehicle if none selected
-  if (selectedVehicleId === null && vehicles.length > 0) {
-    setSelectedVehicleId(vehicles[0].id);
-  }
+  // Auto-select first vehicle if none selected (must be in useEffect, not render body)
+  useEffect(() => {
+    if (selectedVehicleId === null && vehicles.length > 0) {
+      setSelectedVehicleId(vehicles[0].id);
+    }
+  }, [selectedVehicleId, vehicles.length]);
 
   // Record state history for replay
   useEffect(() => {

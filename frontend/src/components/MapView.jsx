@@ -10,27 +10,33 @@
  * 
  * Default: Sydney Harbour, Australia (-33.8568, 151.2153)
  */
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, useMap, useMapEvents, Circle } from 'react-leaflet';
 import BoatMarker from './BoatMarker';
 import MeshLink from './MeshLink';
 import { WaypointPath } from './WaypointMarker';
 import { MAP_CONFIG } from '../utils/constants';
 
-// Component to auto-fit bounds when vehicles change
+// Component to auto-fit bounds once valid GPS positions arrive
 function MapController({ vehicles }) {
   const map = useMap();
+  const fittedRef = useRef(false);
+
+  // Fires whenever any vehicle first gets a non-zero position
+  const hasValidPositions = vehicles.some(v => v.position.lat !== 0 || v.position.lon !== 0);
 
   useEffect(() => {
+    if (fittedRef.current || !hasValidPositions) return;
+
     const validPositions = vehicles
-      .filter(v => v.position.lat !== 0 && v.position.lon !== 0)
+      .filter(v => v.position.lat !== 0 || v.position.lon !== 0)
       .map(v => [v.position.lat, v.position.lon]);
 
-    if (validPositions.length > 0 && !map._userHasPanned) {
+    if (validPositions.length > 0) {
       map.fitBounds(validPositions, { padding: [60, 60], maxZoom: 15 });
-      map._userHasPanned = true;
+      fittedRef.current = true;
     }
-  }, [vehicles.length]);
+  }, [hasValidPositions]);
 
   return null;
 }

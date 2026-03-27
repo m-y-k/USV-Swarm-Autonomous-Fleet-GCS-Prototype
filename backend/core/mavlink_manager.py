@@ -16,6 +16,15 @@ from pymavlink import mavutil
 from core.vehicle import Vehicle, GPSPosition, Attitude
 
 
+# ArduRover/Boat mode mapping fallback — used when pymavlink returns None
+# for MAV_TYPE_SURFACE_BOAT (type 31) which has no built-in mapping in pymavlink.
+_ROVER_MODE_MAPPING = {
+    'MANUAL': 0, 'ACRO': 1, 'LEARNING': 2, 'STEERING': 3, 'HOLD': 4,
+    'LOITER': 5, 'FOLLOW': 6, 'SIMPLE': 7, 'DOCK': 8, 'CIRCLE': 9,
+    'AUTO': 10, 'RTL': 11, 'SMART_RTL': 12, 'GUIDED': 15, 'INIT': 16,
+}
+
+
 class MAVLinkManager:
     """Manages MAVLink connections to multiple ArduPilot SITL instances."""
     
@@ -83,11 +92,11 @@ class MAVLinkManager:
             vehicle.connected = True
             vehicle.last_heartbeat = time.time()
             vehicle.armed = (msg.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED) != 0
-            # Decode flight mode
-            mode_mapping = self.connections[vehicle_id].mode_mapping()
-            if mode_mapping:
-                reverse_map = {v: k for k, v in mode_mapping.items()}
-                vehicle.mode = reverse_map.get(msg.custom_mode, f"MODE_{msg.custom_mode}")
+            # Decode flight mode — fall back to rover mapping if pymavlink returns None
+            # (happens for MAV_TYPE_SURFACE_BOAT which has no entry in pymavlink's table)
+            mode_mapping = self.connections[vehicle_id].mode_mapping() or _ROVER_MODE_MAPPING
+            reverse_map = {v: k for k, v in mode_mapping.items()}
+            vehicle.mode = reverse_map.get(msg.custom_mode, f"MODE_{msg.custom_mode}")
         
         elif msg_type == "GLOBAL_POSITION_INT":
             vehicle.position.lat = msg.lat / 1e7
@@ -139,12 +148,26 @@ class MAVLinkManager:
     def set_mode(self, vehicle_id: int, mode: str):
         """Set flight mode (MANUAL, GUIDED, AUTO, etc.)."""
         conn = self.connections.get(vehicle_id)
-        if conn:
-            mode_mapping = conn.mode_mapping()
-            if mode.upper() in mode_mapping:
-                mode_id = mode_mapping[mode.upper()]
-                conn.set_mode(mode_id)
-                print(f"[MAVLink] Set {self.vehicles[vehicle_id].name} to {mode.upper()}")
+        if not conn:
+            return
+        # Fall back to rover mapping so we never crash on None
+        mode_mapping = conn.mode_mapping() or _ROVER_MODE_MAPPING
+        mode_upper = mode.upper()
+        if mode_upper not in mode_mapping:
+            print(f"[MAVLink] Unknown mode '{mode_upper}' for {self.vehicles[vehicle_id].name}")
+            return
+        mode_id = mode_mapping[mode_upper]
+        # Use COMMAND_LONG/DO_SET_MODE — more reliable than the deprecated SET_MODE message
+        conn.mav.command_long_send(
+            conn.target_system,
+            conn.target_component,
+            mavutil.mavlink.MAV_CMD_DO_SET_MODE,
+            0,  # confirmation
+            mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+            mode_id,
+            0, 0, 0, 0, 0,
+        )
+        print(f"[MAVLink] Set {self.vehicles[vehicle_id].name} to {mode_upper}")
     
     def send_waypoint(self, vehicle_id: int, lat: float, lon: float, alt: float = 0):
         """Send a GUIDED mode waypoint to a vehicle."""
@@ -165,6 +188,22 @@ class MAVLinkManager:
             )
             print(f"[MAVLink] Waypoint sent to {self.vehicles[vehicle_id].name}: ({lat}, {lon})")
     
+    def set_param(self, vehicle_id: int, param: str, value: float):
+        """Set an ArduPilot parameter on a vehicle via PARAM_SET."""
+        conn = self.connections.get(vehicle_id)
+        if not conn:
+            return
+        # PARAM_SET requires the param_id as a 16-byte null-padded string
+        param_id = param.encode('utf-8')
+        conn.mav.param_set_send(
+            conn.target_system,
+            conn.target_component,
+            param_id,
+            float(value),
+            mavutil.mavlink.MAV_PARAM_TYPE_REAL32,
+        )
+        print(f"[MAVLink] Set param {param}={value} on {self.vehicles[vehicle_id].name}")
+
     def upload_mission(self, vehicle_id: int, waypoints: list):
         """
         Upload a full mission (list of waypoints) to a vehicle.
