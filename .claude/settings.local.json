@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find 'D:\\\\Drone Projects\\\\USV Swarm Autonomous Fleet GCS Prototype/frontend/src' -type f \\\\\\(-name *.jsx -o -name *.js \\\\\\))"
+    ]
+  }
+}

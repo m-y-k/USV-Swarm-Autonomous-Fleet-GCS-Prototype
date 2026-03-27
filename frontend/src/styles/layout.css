@@ -1,0 +1,351 @@
+/* ═══════════════════════════════════════════════════════════
+   USV Fleet Command — Layout Styles
+   Dashboard grid layout for the GCS interface
+   ═══════════════════════════════════════════════════════════ */
+
+/* ─── App Container ────────────────────────────────────── */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+/* ─── Header ───────────────────────────────────────────── */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  padding: 0 var(--gap-lg);
+  background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+  border-bottom: 1px solid var(--border-primary);
+  flex-shrink: 0;
+  z-index: 100;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+}
+
+.header-icon {
+  font-size: 1.3rem;
+  filter: drop-shadow(0 0 6px var(--accent-glow));
+}
+
+.header-title-group {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.header-title {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+}
+
+.header-subtitle {
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* Fleet Summary in Header */
+.header-center {
+  display: flex;
+  align-items: center;
+}
+
+.fleet-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-md);
+  padding: 4px 16px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-primary);
+  border-radius: 20px;
+  backdrop-filter: blur(8px);
+}
+
+.fleet-stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fleet-stat-value {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.fleet-stat-label {
+  font-family: var(--font-display);
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fleet-stat-icon {
+  font-size: 0.75rem;
+}
+
+.fleet-stat-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border-primary);
+}
+
+/* Connection Indicator */
+.header-right {
+  display: flex;
+  align-items: center;
+}
+
+.connection-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 14px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  transition: all var(--transition-normal);
+}
+
+.connection-indicator.connected {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: var(--status-online);
+}
+
+.connection-indicator.disconnected {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--status-offline);
+}
+
+.connection-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.connected .connection-dot {
+  background: var(--status-online);
+  box-shadow: 0 0 6px var(--status-online-glow);
+  animation: pulse-green 2s infinite;
+}
+
+.disconnected .connection-dot {
+  background: var(--status-offline);
+  box-shadow: 0 0 6px var(--status-offline-glow);
+}
+
+.connection-text {
+  font-family: var(--font-display);
+}
+
+/* ─── Main Content (Map + Side Panel) ──────────────────── */
+.main-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 1px;
+}
+
+.map-area {
+  flex: 7;
+  display: flex;
+  min-width: 0;
+}
+
+.map-panel {
+  flex: 1;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+}
+
+.side-panel-area {
+  flex: 3;
+  display: flex;
+  min-width: 280px;
+  max-width: 380px;
+}
+
+.side-panel {
+  flex: 1;
+  border-radius: 0;
+  border-right: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.side-panel .panel-body {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* ─── Bottom Content (Mesh + Fleet) ────────────────────── */
+.bottom-content {
+  display: flex;
+  height: 200px;
+  flex-shrink: 0;
+  gap: 1px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.bottom-left-panel {
+  flex: 5;
+  border-radius: 0;
+  border-left: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.bottom-left-panel .panel-body {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.bottom-right-panel {
+  flex: 5;
+  border-radius: 0;
+  border-right: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.bottom-right-panel .panel-body {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* ─── Event Log Strip ──────────────────────────────────── */
+.event-log-strip {
+  height: 80px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-primary);
+}
+
+.event-log-panel {
+  height: 100%;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.event-log-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.log-entry-mini {
+  display: flex;
+  gap: var(--gap-sm);
+  padding: 2px var(--gap-md);
+  font-size: 0.72rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  animation: fade-in 0.3s ease;
+}
+
+.log-time {
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  flex-shrink: 0;
+  min-width: 60px;
+}
+
+.log-msg {
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Fleet Cards (mini preview in bottom panel) ──────── */
+.fleet-cards-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fleet-card-mini {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  padding: 6px var(--gap-md);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: 1px solid transparent;
+}
+
+.fleet-card-mini:hover {
+  background: var(--bg-hover);
+}
+
+.fleet-card-mini.selected {
+  background: var(--bg-hover);
+  border-color: var(--border-accent);
+}
+
+.fleet-card-name {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+/* ─── Placeholders ─────────────────────────────────────── */
+.placeholder-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gap-sm);
+  color: var(--text-dim);
+}
+
+.placeholder-content.compact {
+  gap: 4px;
+}
+
+.placeholder-icon {
+  font-size: 2rem;
+  opacity: 0.4;
+}
+
+.placeholder-content.compact .placeholder-icon {
+  font-size: 1.4rem;
+}
+
+.placeholder-text {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.placeholder-sub {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
