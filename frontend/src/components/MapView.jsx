@@ -12,20 +12,28 @@
  */
 import React, { useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, useMap, useMapEvents, Circle } from 'react-leaflet';
+import L from 'leaflet';
 import BoatMarker from './BoatMarker';
 import MeshLink from './MeshLink';
 import { WaypointPath } from './WaypointMarker';
 import { MAP_CONFIG } from '../utils/constants';
 
-// Component to auto-fit bounds once valid GPS positions arrive
+// Component to auto-fit bounds once valid GPS positions arrive.
+// Resets when all vehicles go offline so SITL restart re-centres the map.
 function MapController({ vehicles }) {
   const map = useMap();
   const fittedRef = useRef(false);
 
-  // Fires whenever any vehicle first gets a non-zero position
+  const aliveCount = vehicles.filter(v => v.connected).length;
   const hasValidPositions = vehicles.some(v => v.position.lat !== 0 || v.position.lon !== 0);
 
   useEffect(() => {
+    // When all vehicles disconnect (SITL stopped/restarted), reset so the next
+    // valid GPS batch re-centres the map to the new spawn location.
+    if (aliveCount === 0) {
+      fittedRef.current = false;
+      return;
+    }
     if (fittedRef.current || !hasValidPositions) return;
 
     const validPositions = vehicles
@@ -36,7 +44,43 @@ function MapController({ vehicles }) {
       map.fitBounds(validPositions, { padding: [60, 60], maxZoom: 15 });
       fittedRef.current = true;
     }
-  }, [hasValidPositions]);
+  }, [hasValidPositions, aliveCount]);
+
+  return null;
+}
+
+// Leaflet control button to manually re-centre the map on the fleet
+function RecenterControl({ vehicles }) {
+  const map = useMap();
+  const vehiclesRef = useRef(vehicles);
+
+  // Keep ref current on every render so the click handler always sees fresh data
+  vehiclesRef.current = vehicles;
+
+  useEffect(() => {
+    const control = L.control({ position: 'topleft' });
+
+    control.onAdd = () => {
+      const btn = L.DomUtil.create('button', 'recenter-btn');
+      btn.innerHTML = '⊙';
+      btn.title = 'Re-centre on fleet';
+      L.DomEvent.disableClickPropagation(btn);
+      L.DomEvent.on(btn, 'click', () => {
+        const validPositions = vehiclesRef.current
+          .filter(v => v.position.lat !== 0 || v.position.lon !== 0)
+          .map(v => [v.position.lat, v.position.lon]);
+        if (validPositions.length > 0) {
+          map.fitBounds(validPositions, { padding: [60, 60], maxZoom: 15 });
+        } else {
+          map.setView(MAP_CONFIG.defaultCenter, MAP_CONFIG.defaultZoom);
+        }
+      });
+      return btn;
+    };
+
+    control.addTo(map);
+    return () => control.remove();
+  }, [map]);
 
   return null;
 }
@@ -87,6 +131,9 @@ export default function MapView({
 
       {/* Auto-fit bounds */}
       <MapController vehicles={vehicles} />
+
+      {/* Manual recenter button */}
+      <RecenterControl vehicles={vehicles} />
 
       {/* Click handler */}
       <MapClickHandler onMapClick={onMapClick} />

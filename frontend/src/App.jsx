@@ -198,7 +198,7 @@ export default function App() {
           <div className="panel-header">
             <h3>Mesh Network</h3>
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-              <SimulationControls sendCommand={sendCommand} vehicles={vehicles} />
+              <SimulationControls sendCommand={sendCommand} vehicles={vehicles} gnssDenied={gnssDeniedVehicles} />
               <button className="btn btn-accent btn-sm" onClick={runDemo} title="Run automated demo scenario (50s)">
                 🎬 Demo
               </button>

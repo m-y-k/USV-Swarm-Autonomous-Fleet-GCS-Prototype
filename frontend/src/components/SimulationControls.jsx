@@ -6,8 +6,9 @@
 import React, { useState } from 'react';
 import { MESH_DEFAULTS } from '../utils/constants';
 
-export default function SimulationControls({ sendCommand, vehicles }) {
+export default function SimulationControls({ sendCommand, vehicles, gnssDenied = {} }) {
   const [meshRange, setMeshRange] = useState(MESH_DEFAULTS.maxRange);
+  const anyGpsDenied = vehicles.some(v => gnssDenied[v.id]?.active);
 
   const handleMeshRangeChange = (e) => {
     const range = parseInt(e.target.value);
@@ -50,7 +51,7 @@ export default function SimulationControls({ sendCommand, vehicles }) {
       {/* GPS Loss simulation */}
       <div className="sim-gps-controls">
         <button
-          className="btn btn-sm btn-danger"
+          className={`btn btn-sm ${anyGpsDenied ? 'btn-danger' : ''}`}
           onClick={() => {
             const selected = vehicles.find(v => v.mesh?.is_leader) || vehicles[0];
             if (selected) sendCommand({ type: 'simulate_gps_loss', vehicle_id: selected.id });
@@ -60,7 +61,7 @@ export default function SimulationControls({ sendCommand, vehicles }) {
           📡✕ GPS Loss
         </button>
         <button
-          className="btn btn-sm"
+          className={`btn btn-sm ${anyGpsDenied ? 'btn-success' : ''}`}
           onClick={() => {
             vehicles.forEach(v => {
               sendCommand({ type: 'simulate_gps_restore', vehicle_id: v.id });

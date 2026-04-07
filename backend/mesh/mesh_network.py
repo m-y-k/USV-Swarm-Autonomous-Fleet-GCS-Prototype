@@ -15,10 +15,22 @@ import asyncio
 import math
 import time
 import uuid
+import json
+import sys
 from typing import Dict, List, Optional, Tuple, Callable
 
 from mesh.peer import Peer, PeerState, MeshMessage
 from mesh.leader_election import LeaderElection
+
+DEBUG_LOG_PATH = r"d:\Drone Projects\USV Swarm Autonomous Fleet GCS Prototype\debug-af8cae.log"
+
+
+def _safe_console_print(text: str):
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "utf-8"
+        print(text.encode(enc, errors="replace").decode(enc, errors="replace"))
 
 
 # ─── Configuration ─────────────────────────────────────────
@@ -115,8 +127,16 @@ class MeshNetwork:
         """Main mesh network loop — runs topology updates and leader monitoring."""
         # Start leader election monitor in background
         asyncio.create_task(self.leader_election.monitor_leader())
-        
+
         while True:
+            # Simulate mesh-layer heartbeats: real nodes broadcast presence
+            # independently of GPS. Only skip nodes explicitly marked offline
+            # (e.g. via simulate_link_drop).
+            now = time.time()
+            for peer in self.peers.values():
+                if peer.state != PeerState.OFFLINE:
+                    peer.last_heartbeat = now
+
             self._update_topology()
             self._update_routing_table()
             self._process_message_queues()
@@ -364,4 +384,45 @@ class MeshNetwork:
     def _log(self, message: str):
         entry = {"time": time.time(), "message": message}
         self.network_log.append(entry)
-        print(f"[Mesh] {message}")
+        # #region agent log
+        try:
+            with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+                f.write(json.dumps({
+                    "sessionId": "af8cae",
+                    "runId": "pre-fix-1",
+                    "hypothesisId": "H2",
+                    "location": "backend/mesh/mesh_network.py:_log",
+                    "message": "About to print mesh log",
+                    "data": {
+                        "raw_message": message,
+                        "has_non_ascii": any(ord(ch) > 127 for ch in message),
+                        "stdout_encoding": getattr(__import__("sys").stdout, "encoding", None),
+                    },
+                    "timestamp": int(time.time() * 1000),
+                }, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
+        # #endregion
+        try:
+            _safe_console_print(f"[Mesh] {message}")
+        except Exception as e:
+            # #region agent log
+            try:
+                with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+                    f.write(json.dumps({
+                        "sessionId": "af8cae",
+                        "runId": "pre-fix-1",
+                        "hypothesisId": "H2",
+                        "location": "backend/mesh/mesh_network.py:_log",
+                        "message": "Mesh print failed",
+                        "data": {
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
+                            "raw_message": message,
+                        },
+                        "timestamp": int(time.time() * 1000),
+                    }, ensure_ascii=False) + "\n")
+            except Exception:
+                pass
+            # #endregion
+            return

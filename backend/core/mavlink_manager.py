@@ -9,11 +9,30 @@ Each boat runs on a separate UDP port. This manager:
 import asyncio
 import math
 import time
+import json
 from typing import Dict, Optional, Callable
 
 from pymavlink import mavutil
 
 from core.vehicle import Vehicle, GPSPosition, Attitude
+
+DEBUG_LOG_PATH = r"d:\Drone Projects\USV Swarm Autonomous Fleet GCS Prototype\debug-af8cae.log"
+
+
+def _debug_log(location: str, message: str, data: dict, hypothesis_id: str, run_id: str):
+    try:
+        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "sessionId": "af8cae",
+                "runId": run_id,
+                "hypothesisId": hypothesis_id,
+                "location": location,
+                "message": message,
+                "data": data,
+                "timestamp": int(time.time() * 1000),
+            }, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
 
 
 # ArduRover/Boat mode mapping fallback — used when pymavlink returns None
@@ -52,6 +71,7 @@ class MAVLinkManager:
         try:
             conn = mavutil.mavlink_connection(connection_string, input=True)
             self.connections[vehicle_id] = conn
+            self.vehicles[vehicle_id].connected = True  # UDP socket bound
             print(f"[MAVLink] Connected to {self.vehicles[vehicle_id].name}")
         except Exception as e:
             print(f"[MAVLink] Failed to connect {vehicle_id}: {e}")
@@ -136,13 +156,15 @@ class MAVLinkManager:
         conn = self.connections.get(vehicle_id)
         if conn:
             conn.arducopter_arm()
+            self.vehicles[vehicle_id].armed = True
             print(f"[MAVLink] Arming {self.vehicles[vehicle_id].name}")
-    
+
     def disarm_vehicle(self, vehicle_id: int):
         """Disarm a vehicle's motors."""
         conn = self.connections.get(vehicle_id)
         if conn:
             conn.arducopter_disarm()
+            self.vehicles[vehicle_id].armed = False
             print(f"[MAVLink] Disarming {self.vehicles[vehicle_id].name}")
     
     def set_mode(self, vehicle_id: int, mode: str):
@@ -155,6 +177,7 @@ class MAVLinkManager:
         mode_upper = mode.upper()
         if mode_upper not in mode_mapping:
             print(f"[MAVLink] Unknown mode '{mode_upper}' for {self.vehicles[vehicle_id].name}")
+            self.vehicles[vehicle_id].mode = mode_upper  # update state even without SITL
             return
         mode_id = mode_mapping[mode_upper]
         # Use COMMAND_LONG/DO_SET_MODE — more reliable than the deprecated SET_MODE message
@@ -167,6 +190,7 @@ class MAVLinkManager:
             mode_id,
             0, 0, 0, 0, 0,
         )
+        self.vehicles[vehicle_id].mode = mode_upper
         print(f"[MAVLink] Set {self.vehicles[vehicle_id].name} to {mode_upper}")
     
     def send_waypoint(self, vehicle_id: int, lat: float, lon: float, alt: float = 0):
@@ -212,6 +236,20 @@ class MAVLinkManager:
         conn = self.connections.get(vehicle_id)
         if not conn:
             return
+
+        # #region agent log
+        _debug_log(
+            "backend/core/mavlink_manager.py:upload_mission",
+            "Mission upload received",
+            {
+                "vehicle_id": vehicle_id,
+                "wp_count": len(waypoints) if isinstance(waypoints, list) else None,
+                "waypoints_preview": waypoints[:3] if isinstance(waypoints, list) else str(type(waypoints)),
+            },
+            "H5",
+            "pre-fix-2",
+        )
+        # #endregion
         
         # Clear existing mission
         conn.waypoint_clear_all_send()
@@ -219,6 +257,9 @@ class MAVLinkManager:
         # Create mission items
         mission_items = []
         for i, wp in enumerate(waypoints):
+            hold = float(wp.get("holdTime", 0) or 0)
+            radius = float(wp.get("radius", 5) or 5)
+            alt = wp.get("alt", 0)
             if i == 0:
                 # First item is HOME
                 item = mavutil.mavlink.MAVLink_mission_item_int_message(
@@ -226,9 +267,9 @@ class MAVLinkManager:
                     i, mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
                     mavutil.mavlink.MAV_CMD_NAV_WAYPOINT,
                     0, 1,  # current, autocontinue
-                    0, 0, 0, 0,
+                    hold, radius, 0, 0,
                     int(wp["lat"] * 1e7), int(wp["lon"] * 1e7),
-                    wp.get("alt", 0)
+                    alt
                 )
             else:
                 item = mavutil.mavlink.MAVLink_mission_item_int_message(
@@ -236,11 +277,31 @@ class MAVLinkManager:
                     i, mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
                     mavutil.mavlink.MAV_CMD_NAV_WAYPOINT,
                     0, 1,
-                    0, 5, 0, 0,  # hold time, acceptance radius
+                    hold, radius, 0, 0,  # hold time, acceptance radius
                     int(wp["lat"] * 1e7), int(wp["lon"] * 1e7),
-                    wp.get("alt", 0)
+                    alt
                 )
             mission_items.append(item)
+
+            # #region agent log
+            _debug_log(
+                "backend/core/mavlink_manager.py:upload_mission",
+                "Mission item built",
+                {
+                    "vehicle_id": vehicle_id,
+                    "seq": i,
+                    "lat": wp.get("lat"),
+                    "lon": wp.get("lon"),
+                    "alt": alt,
+                    "holdTime_in": wp.get("holdTime"),
+                    "radius_in": wp.get("radius"),
+                    "hold_used": hold,
+                    "radius_used": radius,
+                },
+                "H5",
+                "pre-fix-2",
+            )
+            # #endregion
         
         # Send count
         conn.waypoint_count_send(len(mission_items))

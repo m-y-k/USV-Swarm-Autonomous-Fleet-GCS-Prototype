@@ -12,7 +12,7 @@ NUM_BOATS=3
 LOCATIONS=(
     "-33.8568,151.2153"   # Boat 0 — near Opera House
     "-33.8540,151.2200"   # Boat 1 — 500m northeast
-    "-33.8590,151.2100"   # Boat 2 — 500m southwest
+    "-33.8595,151.2180"   # Boat 2 — 500m south-east (harbour basin)
 )
 
 echo "================================================="

@@ -410,6 +410,26 @@ input[type="range"]::-webkit-slider-thumb {
   background: var(--bg-tertiary) !important;
 }
 
+.recenter-btn {
+  display: block;
+  width: 30px;
+  height: 30px;
+  background: var(--bg-panel) !important;
+  color: var(--accent-cyan) !important;
+  border: 1px solid var(--border-primary) !important;
+  border-radius: 4px;
+  font-size: 1.1rem;
+  line-height: 28px;
+  text-align: center;
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.recenter-btn:hover {
+  background: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+}
+
 .leaflet-control-attribution {
   background: rgba(10, 14, 23, 0.85) !important;
   color: var(--text-dim) !important;

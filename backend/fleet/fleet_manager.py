@@ -10,10 +10,23 @@ Fleet Manager — The central orchestrator that ties together:
 """
 import asyncio
 import time
+import json
+import sys
 from typing import Dict, List, Optional, Callable
 
 from core.mavlink_manager import MAVLinkManager
 from mesh.mesh_network import MeshNetwork
+from mesh.peer import PeerState
+
+DEBUG_LOG_PATH = r"d:\Drone Projects\USV Swarm Autonomous Fleet GCS Prototype\debug-af8cae.log"
+
+
+def _safe_console_print(text: str):
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "utf-8"
+        print(text.encode(enc, errors="replace").decode(enc, errors="replace"))
 
 
 class FleetManager:
@@ -46,7 +59,49 @@ class FleetManager:
         self.event_log.append(entry)
         if len(self.event_log) > self._max_events:
             self.event_log = self.event_log[-self._max_events:]
-        print(f"[Event][{category}] {message}")
+        # #region agent log
+        try:
+            with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+                f.write(json.dumps({
+                    "sessionId": "af8cae",
+                    "runId": "pre-fix-1",
+                    "hypothesisId": "H3",
+                    "location": "backend/fleet/fleet_manager.py:_log_event",
+                    "message": "About to print fleet event",
+                    "data": {
+                        "category": category,
+                        "raw_message": message,
+                        "has_non_ascii": any(ord(ch) > 127 for ch in message),
+                        "stdout_encoding": getattr(__import__("sys").stdout, "encoding", None),
+                    },
+                    "timestamp": int(time.time() * 1000),
+                }, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
+        # #endregion
+        try:
+            _safe_console_print(f"[Event][{category}] {message}")
+        except Exception as e:
+            # #region agent log
+            try:
+                with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+                    f.write(json.dumps({
+                        "sessionId": "af8cae",
+                        "runId": "pre-fix-1",
+                        "hypothesisId": "H3",
+                        "location": "backend/fleet/fleet_manager.py:_log_event",
+                        "message": "Fleet event print failed",
+                        "data": {
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
+                            "raw_message": message,
+                        },
+                        "timestamp": int(time.time() * 1000),
+                    }, ensure_ascii=False) + "\n")
+            except Exception:
+                pass
+            # #endregion
+            return
     
     def add_boat(self, vehicle_id: int, connection_string: str):
         """Register a boat in both MAVLink and Mesh systems."""
@@ -72,13 +127,22 @@ class FleetManager:
         """Sync MAVLink telemetry data into mesh network nodes."""
         while self._running:
             for vid, vehicle in self.mavlink.vehicles.items():
-                if vehicle.connected and vehicle.position.lat != 0:
-                    # Update mesh node position from MAVLink GPS
-                    self.mesh.update_node_position(
-                        vid,
-                        vehicle.position.lat,
-                        vehicle.position.lon
-                    )
+                if vehicle.connected:
+                    # Keep vehicle alive as long as connection is established
+                    vehicle.last_heartbeat = time.time()
+                    # Only refresh mesh heartbeat if the node hasn't been explicitly
+                    # failed (simulate_link_drop sets state=OFFLINE deliberately)
+                    if vid in self.mesh.peers:
+                        if self.mesh.peers[vid].state != PeerState.OFFLINE:
+                            self.mesh.peers[vid].last_heartbeat = time.time()
+
+                    if vehicle.position.lat != 0:
+                        # Update mesh node position from MAVLink GPS
+                        self.mesh.update_node_position(
+                            vid,
+                            vehicle.position.lat,
+                            vehicle.position.lon
+                        )
                     
                     # Sync leader status back to vehicle
                     if vid in self.mesh.peers:
@@ -161,11 +225,19 @@ class FleetManager:
     def simulate_failure(self, vehicle_id: int):
         """Simulate a vessel failure for demo."""
         self.mesh.simulate_link_drop(vehicle_id)
+        vehicle = self.mavlink.vehicles.get(vehicle_id)
+        if vehicle:
+            vehicle.connected = False
+            vehicle.last_heartbeat = 0
         self._log_event("system", f"Simulated failure on USV-{vehicle_id:02d}", "warning")
-    
+
     def simulate_restore(self, vehicle_id: int):
         """Restore a vessel from simulated failure."""
         self.mesh.simulate_link_restore(vehicle_id)
+        vehicle = self.mavlink.vehicles.get(vehicle_id)
+        if vehicle:
+            vehicle.connected = True
+            vehicle.last_heartbeat = time.time()
         self._log_event("system", f"Restored USV-{vehicle_id:02d}")
     
     def set_param(self, vehicle_id: int, param: str, value: float):

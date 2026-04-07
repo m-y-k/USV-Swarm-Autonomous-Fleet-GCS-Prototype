@@ -18,9 +18,21 @@ In USV context:
 import asyncio
 import time
 import uuid
+import json
+import sys
 from typing import Dict, Optional, Callable, List
 
 from mesh.peer import Peer, PeerState, MeshMessage
+
+DEBUG_LOG_PATH = r"d:\Drone Projects\USV Swarm Autonomous Fleet GCS Prototype\debug-af8cae.log"
+
+
+def _safe_console_print(text: str):
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "utf-8"
+        print(text.encode(enc, errors="replace").decode(enc, errors="replace"))
 
 
 class LeaderElection:
@@ -246,4 +258,45 @@ class LeaderElection:
         """Add to election log."""
         entry = {"time": time.time(), "message": message}
         self.election_log.append(entry)
-        print(f"[Election] {message}")
+        # #region agent log
+        try:
+            with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+                f.write(json.dumps({
+                    "sessionId": "af8cae",
+                    "runId": "pre-fix-1",
+                    "hypothesisId": "H1",
+                    "location": "backend/mesh/leader_election.py:_log",
+                    "message": "About to print election log",
+                    "data": {
+                        "raw_message": message,
+                        "has_non_ascii": any(ord(ch) > 127 for ch in message),
+                        "stdout_encoding": getattr(__import__("sys").stdout, "encoding", None),
+                    },
+                    "timestamp": int(time.time() * 1000),
+                }, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
+        # #endregion
+        try:
+            _safe_console_print(f"[Election] {message}")
+        except Exception as e:
+            # #region agent log
+            try:
+                with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+                    f.write(json.dumps({
+                        "sessionId": "af8cae",
+                        "runId": "pre-fix-1",
+                        "hypothesisId": "H1",
+                        "location": "backend/mesh/leader_election.py:_log",
+                        "message": "Election print failed",
+                        "data": {
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
+                            "raw_message": message,
+                        },
+                        "timestamp": int(time.time() * 1000),
+                    }, ensure_ascii=False) + "\n")
+            except Exception:
+                pass
+            # #endregion
+            return
