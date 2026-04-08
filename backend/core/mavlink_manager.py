@@ -55,6 +55,7 @@ class MAVLinkManager:
         self._heartbeat_tick = 0
         self._pending_missions: Dict[int, list] = {}  # vehicle_id -> list of raw waypoint dicts
         self._streams_requested: set = set()  # vehicle_ids that have had data streams requested
+        self._simulated_failures: set = set()  # vehicle_ids that are force-killed via simulate_failure
     
     def add_vehicle(self, vehicle_id: int, connection_string: str):
         """
@@ -116,6 +117,14 @@ class MAVLinkManager:
     def stop(self):
         """Stop the telemetry loop."""
         self._running = False
+
+    def mark_failed(self, vehicle_id: int):
+        """Block SITL heartbeat processing for a simulated-failed vehicle."""
+        self._simulated_failures.add(vehicle_id)
+
+    def mark_restored(self, vehicle_id: int):
+        """Re-enable SITL heartbeat processing after a simulated restore."""
+        self._simulated_failures.discard(vehicle_id)
     
     def _process_message(self, vehicle_id: int, msg):
         """Process a single MAVLink message and update vehicle state."""
@@ -123,6 +132,8 @@ class MAVLinkManager:
         msg_type = msg.get_type()
         
         if msg_type == "HEARTBEAT":
+            if vehicle_id in self._simulated_failures:
+                return  # This vehicle is force-killed; ignore SITL heartbeats until restored
             if not vehicle.connected:
                 print(f"[MAVLink] SITL heartbeat received from {vehicle.name} — link established")
             vehicle.connected = True
@@ -178,14 +189,16 @@ class MAVLinkManager:
                 alt = float(wp.get("alt", 0) or 0)
                 lat_int = int(wp["lat"] * 1e7)
                 lon_int = int(wp["lon"] * 1e7)
-                # Respond with MISSION_ITEM_INT for both request variants
+                # Respond with MISSION_ITEM_INT for both request variants.
+                # seq=0 is always the home reference (current=0, not a nav target).
+                # seq=1 is the first real navigation waypoint (current=1).
                 conn.mav.mission_item_int_send(
                     conn.target_system,
                     conn.target_component,
                     seq,
                     mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
                     mavutil.mavlink.MAV_CMD_NAV_WAYPOINT,
-                    1 if seq == 0 else 0,  # current
+                    1 if seq == 1 else 0,  # current: first nav WP is seq=1
                     1,                     # autocontinue
                     hold, radius, 0, 0,    # param1-4
                     lat_int, lon_int, alt,
@@ -195,6 +208,11 @@ class MAVLinkManager:
         elif msg_type == "MISSION_ACK":
             if msg.type == 0:  # MAV_MISSION_ACCEPTED
                 print(f"[MAVLink] Mission accepted by {vehicle.name}")
+                # Point ArduRover at seq=1 — the first real nav waypoint.
+                # seq=0 is our home reference; skipping it ensures the boat navigates
+                # to the user's first waypoint rather than bouncing back to home first.
+                conn = self.connections[vehicle_id]
+                conn.mav.mission_set_current_send(conn.target_system, conn.target_component, 1)
             else:
                 print(f"[MAVLink] Mission rejected by {vehicle.name} (type={msg.type})")
             self._pending_missions.pop(vehicle_id, None)
@@ -206,12 +224,13 @@ class MAVLinkManager:
             _MAV_RESULT = {0: "ACCEPTED", 1: "TEMP_REJECTED", 2: "DENIED", 3: "UNSUPPORTED", 4: "FAILED"}
             result_str = _MAV_RESULT.get(result, f"RESULT_{result}")
             if cmd == mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM:
+                print(f"[MAVLink] ARM {result_str} for {vehicle.name}")
                 if result != 0:
-                    print(f"[MAVLink] ARM command {result_str} for {vehicle.name} — check pre-arm conditions")
                     vehicle.armed = False  # Correct local state if arm was rejected
             elif cmd == mavutil.mavlink.MAV_CMD_DO_SET_MODE:
-                if result != 0:
-                    print(f"[MAVLink] MODE CHANGE {result_str} for {vehicle.name}")
+                print(f"[MAVLink] MODE CHANGE {result_str} for {vehicle.name}")
+            elif cmd == mavutil.mavlink.MAV_CMD_MISSION_START:
+                print(f"[MAVLink] MISSION START {result_str} for {vehicle.name}")
     
     def _request_data_streams(self, vehicle_id: int):
         """Ask ArduPilot to start streaming all telemetry we need."""
@@ -321,29 +340,48 @@ class MAVLinkManager:
         )
         print(f"[MAVLink] Set param {param}={value} on {self.vehicles[vehicle_id].name}")
 
+    def set_mission_current(self, vehicle_id: int, seq: int = 0):
+        """Tell ArduPilot which mission item to execute next (resets mission pointer)."""
+        conn = self.connections.get(vehicle_id)
+        if conn:
+            conn.mav.mission_set_current_send(conn.target_system, conn.target_component, seq)
+
     def upload_mission(self, vehicle_id: int, waypoints: list) -> bool:
         """
         Upload a full mission (list of waypoints) to a vehicle.
         Each waypoint: {"lat": float, "lon": float, "alt": float}
         Returns True if the handshake was initiated, False if no connection.
 
+        ArduRover mission convention:
+          seq=0  — Home reference waypoint (vehicle's current GPS position).
+                   ArduRover's AUTO mode entry check requires num_commands() >= 2,
+                   so even a single-waypoint mission works once home is prepended.
+          seq=1+ — Actual navigation waypoints (user-supplied).
+
+        MISSION_SET_CURRENT(1) is sent on MISSION_ACK to skip the home item
+        and begin navigation at the first real waypoint.
+
         NOTE: We do NOT send MISSION_CLEAR_ALL before MISSION_COUNT.
         MISSION_CLEAR_ALL generates its own MISSION_ACK response which arrives
         before the upload handshake starts and would pop _pending_missions,
         leaving MISSION_REQUEST with no items to send (silent upload failure).
-        MISSION_COUNT alone is sufficient — ArduPilot sets _cmd_total = N after
-        a successful upload so old items beyond N become unreachable.
         """
         conn = self.connections.get(vehicle_id)
         if not conn:
             return False
 
-        # Store waypoints before sending MISSION_COUNT so items are available
-        # the moment MISSION_REQUEST arrives in _process_message.
-        self._pending_missions[vehicle_id] = list(waypoints)
+        vehicle = self.vehicles.get(vehicle_id)
+        home_lat = vehicle.position.lat if (vehicle and vehicle.position.lat != 0) else 0.0
+        home_lon = vehicle.position.lon if (vehicle and vehicle.position.lon != 0) else 0.0
+
+        # Prepend home item so ArduRover has a valid reference at seq=0.
+        # Navigation starts at seq=1 (first user waypoint) via MISSION_SET_CURRENT(1).
+        full_mission = [{"lat": home_lat, "lon": home_lon, "alt": 0, "holdTime": 0, "radius": 1}] + list(waypoints)
+
+        self._pending_missions[vehicle_id] = full_mission
 
         # Initiate MAVLink mission upload handshake (no preceding CLEAR_ALL)
-        conn.waypoint_count_send(len(waypoints))
+        conn.waypoint_count_send(len(full_mission))
 
-        print(f"[MAVLink] Mission handshake started for {self.vehicles[vehicle_id].name} ({len(waypoints)} waypoints)")
+        print(f"[MAVLink] Mission handshake started for {self.vehicles[vehicle_id].name} ({len(waypoints)} waypoints + home)")
         return True

@@ -97,11 +97,11 @@ function generatePerimeterPatrol(center, radiusMeters, numVessels) {
   return missions;
 }
 
-function generateFollowLeader(leaderPos, heading, numFollowers, formation, spacing) {
+function generateFollowLeader(leaderPos, heading, followers, formation, spacing) {
   const headingRad = (heading * Math.PI) / 180;
   const missions = {};
 
-  for (let f = 0; f < numFollowers; f++) {
+  followers.forEach((follower, f) => {
     let dNorth, dEast;
     if (formation === 'v_shape') {
       const side = f % 2 === 0 ? 1 : -1;
@@ -119,8 +119,9 @@ function generateFollowLeader(leaderPos, heading, numFollowers, formation, spaci
     const R = 6371000;
     const newLat = leaderPos.lat + (dNorth / R) * (180 / Math.PI);
     const newLon = leaderPos.lon + (dEast / (R * Math.cos(leaderPos.lat * Math.PI / 180))) * (180 / Math.PI);
-    missions[f + 1] = [{ lat: newLat, lon: newLon, alt: 0, holdTime: 0, radius: 5 }];
-  }
+    // Key by the follower's actual vehicle ID so missions reach the right boats
+    missions[follower.id] = [{ lat: newLat, lon: newLon, alt: 0, holdTime: 0, radius: 5 }];
+  });
   return missions;
 }
 
@@ -261,7 +262,9 @@ export default function MissionPlanner({ vehicle, vehicles, waypoints, setWaypoi
 
   const handleStartMission = () => {
     if (!vehicle) return;
-    sendCommand({ type: 'set_mode', vehicle_id: vehicle.id, mode: 'AUTO' });
+    // start_mission arms the vehicle, resets the mission pointer to item 0,
+    // then sets AUTO — the correct sequence for reliable mission execution.
+    sendCommand({ type: 'start_mission', vehicle_id: vehicle.id });
   };
 
   const handleGeneratePattern = (previewOnly = false) => {
@@ -292,11 +295,12 @@ export default function MissionPlanner({ vehicle, vehicles, waypoints, setWaypoi
         break;
       case 'follow': {
         const leader = vehicles.find(v => v.mesh?.is_leader) || vehicles[0];
-        if (leader) {
+        const followers = vehicles.filter(v => v.id !== leader.id);
+        if (leader && followers.length > 0) {
           missions = generateFollowLeader(
             { lat: leader.position?.lat || center.lat, lon: leader.position?.lon || center.lon },
             leader.heading || 0,
-            vehicles.length - 1,
+            followers,
             followFormation,
             spacing
           );

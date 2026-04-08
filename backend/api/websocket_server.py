@@ -134,6 +134,9 @@ async def handle_command(command: dict):
             range_m = command.get("range", 2000)
             fleet_manager.set_mesh_range(range_m)
 
+        elif cmd_type == "start_mission":
+            asyncio.create_task(fleet_manager.start_mission(vehicle_id))
+
         elif cmd_type == "fleet_auto_patrol":
             asyncio.create_task(fleet_manager.fleet_auto_patrol())
 

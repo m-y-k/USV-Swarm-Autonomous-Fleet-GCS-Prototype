@@ -119,6 +119,8 @@ class MeshNetwork:
     def update_node_position(self, node_id: int, lat: float, lon: float):
         """Update a node's GPS position (called from MAVLink telemetry)."""
         if node_id in self.peers:
+            if self.peers[node_id].state == PeerState.OFFLINE:
+                return  # Don't resurrect explicitly failed nodes
             self.peers[node_id].update_position(lat, lon)
             self.peers[node_id].last_heartbeat = time.time()
             self.peers[node_id].state = PeerState.ACTIVE

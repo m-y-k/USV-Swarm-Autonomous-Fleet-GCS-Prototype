@@ -223,8 +223,23 @@ class FleetManager:
         if started:
             self._log_event("mission", f"Mission uploaded to USV-{vehicle_id:02d}: {len(waypoints)} waypoints")
     
+    async def start_mission(self, vehicle_id: int):
+        """Arm vehicle, reset mission to item 0, then engage AUTO mode.
+
+        Provides correct sequencing that the simple set_mode(AUTO) path lacks:
+        arm → wait for SITL to accept → reset mission pointer → AUTO.
+        """
+        self.arm(vehicle_id)
+        await asyncio.sleep(0.5)
+        # seq=1 is the first real nav waypoint — seq=0 is the home reference
+        self.mavlink.set_mission_current(vehicle_id, 1)
+        await asyncio.sleep(0.1)
+        self.set_mode(vehicle_id, "AUTO")
+        self._log_event("command", f"Mission started on USV-{vehicle_id:02d}")
+
     def simulate_failure(self, vehicle_id: int):
         """Simulate a vessel failure for demo."""
+        self.mavlink.mark_failed(vehicle_id)  # Block SITL heartbeats from resurrecting this vehicle
         self.mesh.simulate_link_drop(vehicle_id)
         vehicle = self.mavlink.vehicles.get(vehicle_id)
         if vehicle:
@@ -234,6 +249,7 @@ class FleetManager:
 
     def simulate_restore(self, vehicle_id: int):
         """Restore a vessel from simulated failure."""
+        self.mavlink.mark_restored(vehicle_id)  # Re-enable SITL heartbeat processing
         self.mesh.simulate_link_restore(vehicle_id)
         vehicle = self.mavlink.vehicles.get(vehicle_id)
         if vehicle:
@@ -311,9 +327,9 @@ class FleetManager:
             # Waypoint ahead in current heading direction
             wp1_lat = lat + (step * math.cos(hdg_rad) / R) * (180 / math.pi)
             wp1_lon = lon + (step * math.sin(hdg_rad) / (R * math.cos(math.radians(lat)))) * (180 / math.pi)
-            # Return waypoint behind
-            wp2_lat = lat - (step * math.cos(hdg_rad) / R) * (180 / math.pi)
-            wp2_lon = lon - (step * math.sin(hdg_rad) / (R * math.cos(math.radians(lat)))) * (180 / math.pi)
+            # Return waypoint: back to the starting position so both legs are equal length
+            wp2_lat = lat
+            wp2_lon = lon
 
             self.upload_mission(vehicle.vehicle_id, [
                 {"lat": wp1_lat, "lon": wp1_lon, "alt": 0},
@@ -322,6 +338,12 @@ class FleetManager:
 
         # Allow ArduPilot to complete the MISSION_REQUEST/ITEM handshake before arming
         await asyncio.sleep(2.0)
+
+        # Confirm mission pointer at seq=1 (skip home reference at seq=0)
+        for vehicle in vehicles:
+            self.mavlink.set_mission_current(vehicle.vehicle_id, 1)
+
+        await asyncio.sleep(0.1)
 
         for vehicle in vehicles:
             self.arm(vehicle.vehicle_id)
