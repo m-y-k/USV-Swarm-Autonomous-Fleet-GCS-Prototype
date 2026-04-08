@@ -224,11 +224,12 @@ class FleetManager:
             self._log_event("mission", f"Mission uploaded to USV-{vehicle_id:02d}: {len(waypoints)} waypoints")
     
     async def start_mission(self, vehicle_id: int):
-        """Arm vehicle, reset mission to item 0, then engage AUTO mode.
+        """Arm vehicle, apply smooth nav params, reset mission to item 1, engage AUTO.
 
-        Provides correct sequencing that the simple set_mode(AUTO) path lacks:
-        arm → wait for SITL to accept → reset mission pointer → AUTO.
+        Sequence: smooth params → arm → wait → MISSION_SET_CURRENT(1) → AUTO.
         """
+        self._apply_smooth_nav_params(vehicle_id)
+        await asyncio.sleep(0.2)
         self.arm(vehicle_id)
         await asyncio.sleep(0.5)
         # seq=1 is the first real nav waypoint — seq=0 is the home reference
@@ -292,14 +293,34 @@ class FleetManager:
         MESH_CONFIG["max_range_meters"] = float(range_m)
         self._log_event("mesh", f"Mesh range adjusted to {range_m}m")
     
+    def _apply_smooth_nav_params(self, vehicle_id: int):
+        """
+        Set ArduRover navigation parameters for smooth, predictable tracking.
+        Called before starting AUTO missions so boats don't oscillate at waypoints.
+        """
+        params = {
+            "WP_RADIUS":      15.0,   # 15 m acceptance circle — eliminates waypoint oscillation
+            "NAVL1_PERIOD":   10.0,   # L1 guidance period (lower = tighter tracking)
+            "NAVL1_DAMPING":   0.75,  # Damping ratio for L1 controller
+            "ATC_STR_RAT_P":   0.5,  # Steering rate P — moderate for stability
+            "ATC_STR_RAT_I":   0.2,  # Steering rate I
+            "ATC_STR_RAT_D":   0.01, # Steering rate D — low to avoid noise amplification
+            "CRUISE_SPEED":    3.0,  # 3 m/s cruise speed (~10 kph)
+            "CRUISE_THROTTLE": 50.0, # 50% throttle at cruise speed
+        }
+        for param, value in params.items():
+            self.mavlink.set_param(vehicle_id, param, value)
+
     async def fleet_auto_patrol(self):
         """
-        Make ALL vehicles start an AUTO patrol.
+        Make ALL vehicles start a continuous north–south patrol.
 
-        ArduRover rejects AUTO mode entry when the mission is empty
-        (ModeAuto::_enter checks mission.num_commands() < 2).  This method
-        uploads a minimal two-waypoint out-and-back patrol for each vessel
-        based on its current heading, then arms and sets AUTO.
+        Improvements over the original heading-based patrol:
+        - Fixed NORTH direction — re-running never reverses the patrol axis
+        - DO_JUMP at the end creates an infinite loop (no more mission-complete HOLD)
+        - Smooth navigation params applied before arming
+        - 400 m legs for clearly visible movement in SITL
+        - Each boat offset 200 m east per ID so tracks don't overlap
         """
         import math
         vehicles = list(self.mavlink.vehicles.values())
@@ -309,37 +330,48 @@ class FleetManager:
 
         self._log_event("command", "Fleet AUTO patrol: uploading missions...")
 
-        # Switch to HOLD first so MISSION_CLEAR_ALL is accepted.
-        # ArduRover returns MAV_MISSION_DENIED (15) for MISSION_CLEAR_ALL while in AUTO.
+        # Switch to HOLD first — ArduRover rejects MISSION_COUNT while in AUTO.
         for vehicle in vehicles:
             if self.mavlink.connections.get(vehicle.vehicle_id):
                 self.set_mode(vehicle.vehicle_id, "HOLD")
 
-        await asyncio.sleep(0.5)  # Let mode change take effect before upload
+        await asyncio.sleep(0.5)
+
+        R = 6371000
+        step = 400   # metres north / south — long enough to see clearly on map
 
         for vehicle in vehicles:
             lat = vehicle.position.lat or -33.8568
             lon = vehicle.position.lon or 151.2153
-            hdg_rad = math.radians(vehicle.heading or 0)
-            R = 6371000
-            step = 300  # metres ahead / behind
 
-            # Waypoint ahead in current heading direction
-            wp1_lat = lat + (step * math.cos(hdg_rad) / R) * (180 / math.pi)
-            wp1_lon = lon + (step * math.sin(hdg_rad) / (R * math.cos(math.radians(lat)))) * (180 / math.pi)
-            # Return waypoint: back to the starting position so both legs are equal length
-            wp2_lat = lat
-            wp2_lon = lon
+            # Lateral separation: spread boats 200 m east per ID so patrol
+            # lanes don't overlap. Each boat stays in its own longitude lane.
+            east_offset_m = 200 * vehicle.vehicle_id
+            east_offset_deg = east_offset_m / (R * math.cos(math.radians(lat))) * (180 / math.pi)
+            patrol_lon = lon + east_offset_deg
+
+            wp1_lat = lat + (step / R) * (180 / math.pi)   # 400 m north
+            wp1_lon = patrol_lon
+            wp2_lat = lat - (step / R) * (180 / math.pi)   # 400 m south
+            wp2_lon = patrol_lon
 
             self.upload_mission(vehicle.vehicle_id, [
-                {"lat": wp1_lat, "lon": wp1_lon, "alt": 0},
-                {"lat": wp2_lat, "lon": wp2_lon, "alt": 0},
+                {"lat": wp1_lat, "lon": wp1_lon, "alt": 0, "radius": 15},
+                {"lat": wp2_lat, "lon": wp2_lon, "alt": 0, "radius": 15},
+                # DO_JUMP back to seq=1 (wp_north) for continuous looping
+                {"cmd": "do_jump", "jump_to": 1, "repeat": -1},
             ])
 
-        # Allow ArduPilot to complete the MISSION_REQUEST/ITEM handshake before arming
+        # Wait for all MISSION_REQUEST/ITEM handshakes to complete
         await asyncio.sleep(2.0)
 
-        # Confirm mission pointer at seq=1 (skip home reference at seq=0)
+        # Smooth nav params before arming
+        for vehicle in vehicles:
+            self._apply_smooth_nav_params(vehicle.vehicle_id)
+
+        await asyncio.sleep(0.3)
+
+        # Confirm mission pointer at seq=1 (skip home at seq=0)
         for vehicle in vehicles:
             self.mavlink.set_mission_current(vehicle.vehicle_id, 1)
 

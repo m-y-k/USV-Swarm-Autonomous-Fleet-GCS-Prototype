@@ -184,25 +184,41 @@ class MAVLinkManager:
             if pending is not None and seq < len(pending):
                 conn = self.connections[vehicle_id]
                 wp = pending[seq]
-                hold = float(wp.get("holdTime", 0) or 0)
-                radius = float(wp.get("radius", 5) or 5)
-                alt = float(wp.get("alt", 0) or 0)
-                lat_int = int(wp["lat"] * 1e7)
-                lon_int = int(wp["lon"] * 1e7)
-                # Respond with MISSION_ITEM_INT for both request variants.
-                # seq=0 is always the home reference (current=0, not a nav target).
-                # seq=1 is the first real navigation waypoint (current=1).
-                conn.mav.mission_item_int_send(
-                    conn.target_system,
-                    conn.target_component,
-                    seq,
-                    mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
-                    mavutil.mavlink.MAV_CMD_NAV_WAYPOINT,
-                    1 if seq == 1 else 0,  # current: first nav WP is seq=1
-                    1,                     # autocontinue
-                    hold, radius, 0, 0,    # param1-4
-                    lat_int, lon_int, alt,
-                )
+
+                if wp.get("cmd") == "do_jump":
+                    # DO_JUMP: jump back to a seq indefinitely for looping patrols.
+                    # Uses MAV_FRAME_MISSION (non-position command, no lat/lon).
+                    conn.mav.mission_item_int_send(
+                        conn.target_system,
+                        conn.target_component,
+                        seq,
+                        mavutil.mavlink.MAV_FRAME_MISSION,
+                        mavutil.mavlink.MAV_CMD_DO_JUMP,
+                        0, 1,  # current=0, autocontinue=1
+                        float(wp.get("jump_to", 1)),   # param1: target seq
+                        float(wp.get("repeat", -1)),   # param2: -1 = infinite
+                        0, 0,
+                        0, 0, 0,
+                    )
+                else:
+                    hold = float(wp.get("holdTime", 0) or 0)
+                    radius = float(wp.get("radius", 15) or 15)
+                    alt = float(wp.get("alt", 0) or 0)
+                    lat_int = int(wp["lat"] * 1e7)
+                    lon_int = int(wp["lon"] * 1e7)
+                    # seq=0 is always the home reference (current=0, not a nav target).
+                    # seq=1 is the first real navigation waypoint (current=1).
+                    conn.mav.mission_item_int_send(
+                        conn.target_system,
+                        conn.target_component,
+                        seq,
+                        mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
+                        mavutil.mavlink.MAV_CMD_NAV_WAYPOINT,
+                        1 if seq == 1 else 0,  # current: first nav WP is seq=1
+                        1,                     # autocontinue
+                        hold, radius, 0, 0,    # param1-4
+                        lat_int, lon_int, alt,
+                    )
                 print(f"[MAVLink] Sent mission item {seq}/{len(pending)-1} to {vehicle.name}")
 
         elif msg_type == "MISSION_ACK":
