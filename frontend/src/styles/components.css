@@ -1,0 +1,363 @@
+/* ═══════════════════════════════════════════════════════════
+   USV Fleet Command — Component Styles
+   Styles for TelemetryPanel, CommandPanel, FleetStatus,
+   MeshTopology, EventLog, BoatMarker
+   ═══════════════════════════════════════════════════════════ */
+
+/* ─── Telemetry Panel ──────────────────────────────────── */
+.telemetry-panel {
+  padding: var(--gap-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-md);
+}
+
+.telemetry-summary-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-lg);
+  padding: var(--gap-sm);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+}
+
+.compass-widget {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.compass-value {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.telemetry-speed-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.speed-large {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.telemetry-value.large {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--accent-bright);
+}
+
+.speed-knots {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--text-secondary);
+}
+
+.telemetry-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.telemetry-section-title {
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--border-primary);
+  margin-bottom: 2px;
+}
+
+.telemetry-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 0;
+}
+
+/* Battery */
+.battery-widget {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.battery-bar-track {
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--border-primary);
+}
+
+.battery-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width var(--transition-normal);
+}
+
+.battery-values {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.battery-high { color: var(--battery-high) !important; }
+.battery-mid { color: var(--battery-mid) !important; }
+.battery-low { color: var(--battery-low) !important; }
+
+/* GPS */
+.gps-fix-icon {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+/* ─── Command Panel ────────────────────────────────────── */
+.command-panel {
+  padding: var(--gap-md);
+  border-top: 1px solid var(--border-primary);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-md);
+}
+
+.command-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+}
+
+.command-section-title {
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.command-row {
+  display: flex;
+  gap: var(--gap-sm);
+  align-items: center;
+}
+
+.mode-select {
+  flex: 1;
+}
+
+/* ─── Fleet Status Cards ───────────────────────────────── */
+.fleet-status {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fleet-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px var(--gap-sm);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: 1px solid transparent;
+}
+
+.fleet-card:hover {
+  background: var(--bg-hover);
+}
+
+.fleet-card.selected {
+  background: var(--bg-hover);
+  border-color: var(--border-accent);
+}
+
+.fleet-card-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fleet-card-name {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.fleet-card-leader {
+  font-size: 0.7rem;
+}
+
+.fleet-card-stats {
+  display: flex;
+  gap: var(--gap-md);
+  padding-left: 14px;
+}
+
+.fleet-card-stat {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.fleet-card-stat .telemetry-label {
+  font-size: 0.6rem;
+}
+
+.fleet-card-stat .telemetry-value {
+  font-size: 0.72rem;
+}
+
+/* ─── Mesh Topology ────────────────────────────────────── */
+.mesh-topology {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.mesh-topology-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: var(--gap-lg);
+}
+
+.mesh-graph-container {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gap-sm);
+}
+
+.mesh-graph-svg {
+  width: 100%;
+  height: 100%;
+  max-height: 140px;
+}
+
+.mesh-stats-bar {
+  display: flex;
+  gap: var(--gap-lg);
+  padding: 4px var(--gap-md);
+  border-top: 1px solid var(--border-primary);
+  background: rgba(0, 0, 0, 0.2);
+  justify-content: center;
+}
+
+.mesh-stat-item {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.mesh-stat-item .telemetry-label {
+  font-size: 0.6rem;
+}
+
+.mesh-stat-item .telemetry-value {
+  font-size: 0.72rem;
+}
+
+/* ─── Simulation Controls ──────────────────────────────── */
+.simulation-controls {
+  display: flex;
+  gap: 4px;
+}
+
+/* ─── Event Log Controls ───────────────────────────────── */
+.event-log-controls {
+  display: flex;
+  gap: var(--gap-sm);
+  align-items: center;
+}
+
+.log-cat-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ─── Boat Marker Styles (Leaflet overlay) ─────────────── */
+.boat-marker-icon {
+  background: none !important;
+  border: none !important;
+}
+
+.boat-label-container {
+  background: none !important;
+  border: none !important;
+}
+
+.boat-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(10, 14, 23, 0.85);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+}
+
+.boat-label.leader {
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.boat-label.offline {
+  opacity: 0.5;
+}
+
+.boat-label-mode {
+  font-size: 0.58rem;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* Leaflet popup override for dark theme */
+.leaflet-popup-content-wrapper {
+  background: var(--bg-panel) !important;
+  border: 1px solid var(--border-primary) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.leaflet-popup-tip {
+  background: var(--bg-panel) !important;
+  border: 1px solid var(--border-primary) !important;
+}
+
+.leaflet-popup-content {
+  margin: 8px 12px !important;
+}
+
+/* Mesh link tooltip */
+.mesh-link-tooltip .leaflet-tooltip-content-wrapper,
+.mesh-link-tooltip {
+  background: var(--bg-panel) !important;
+  border: 1px solid var(--border-primary) !important;
+  border-radius: var(--radius-sm) !important;
+  box-shadow: var(--shadow-md) !important;
+}

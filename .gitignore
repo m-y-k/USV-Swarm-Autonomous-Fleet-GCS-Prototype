@@ -1,0 +1,21 @@
+# Python Virtual Environments (The cause of your fatal error)
+backend/venv_linux/
+backend/source/
+venv/
+ENV/
+
+# Logs
+*.log
+backend/**/*.log
+
+# Local/IDE Settings
+.claude/
+.vscode/
+.idea/
+
+# Python bytecode
+**/__pycache__/
+*.py[cod]
+
+# Ardupilot (if you want to manage it manually and not as a submodule)
+# ardupilot/.git
